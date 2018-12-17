@@ -160,9 +160,17 @@ wxString GetPreferredUILanguage(const wxArrayString& available, wxArrayString& a
                 for ( unsigned i = 0; i < numLangs; i++ )
                 {
                     const wxString lang(buf);
-                    preferred.push_back(lang);
+                    preferred.Add(lang);
                     buf += lang.length() + 1;
                 }
+
+                if ( preferred.empty() )
+                {
+                    const wxString fallback(GetPreferredUILanguageFallback(available));
+                    if ( fallback )
+                        allPreferred.Add(fallback)
+                }
+
                 LogTraceArray(" - system preferred languages", preferred);
 
                 for ( wxArrayString::const_iterator j = preferred.begin();
@@ -184,10 +192,8 @@ wxString GetPreferredUILanguage(const wxArrayString& available, wxArrayString& a
             }
         }
     }
-    if ( !allPreferred.empty() )
-        return allPreferred[0];
 
-    return GetPreferredUILanguageFallback(available);
+    return allPreferred.empty() ? wxString() : allPreferred[0];
 }
 
 #elif defined(__WXOSX__)
@@ -244,10 +250,15 @@ wxString GetPreferredUILanguage(const wxArrayString& available, wxArrayString &a
         else
             allPreferred.push_back(i->second);
     }
-    if ( allPreferred.empty() == false )
-        return allPreferred[0];
 
-    return GetPreferredUILanguageFallback(available);
+    if ( allPreferred.empty() )
+    {
+        wxString fallback(GetPreferredUILanguageFallback(available));
+        if ( fallback ) // FIXME: check if available
+            allPreferred.Add(fallback)
+    }
+
+    return allPreferred.empty() ? wxString() : allPreferred[0];
 }
 
 #else
@@ -271,13 +282,20 @@ wxString GetPreferredUILanguage(const wxArrayString& available, wxArrayString &a
             const wxString tok = tknzr.GetNextToken();
             if ( const wxLanguageInfo *li = wxLocale::FindLanguageInfo(tok) )
             {
-                preferred.push_back(li->CanonicalName);
+                preferred.Add(li->CanonicalName);
             }
         }
         if ( preferred.empty() )
         {
             wxLogTrace(TRACE_I18N, " - LANGUAGE was set, but it didn't contain any languages recognized by the system");
         }
+    }
+
+    if ( preferred.empty() )
+    {
+        const wxString fallback(GetPreferredUILanguageFallback(available));
+        if ( fallback )
+            preferred.Add(fallback);
     }
 
     LogTraceArray(" - preferred languages from environment", preferred);
@@ -296,10 +314,8 @@ wxString GetPreferredUILanguage(const wxArrayString& available, wxArrayString &a
                 allPreferred.Add(lang);
         }
     }
-    if ( allPreferred.empty() == false )
-        return allPreferred[0];
 
-    return GetPreferredUILanguageFallback(available);
+    return allPreferred.empty() ? wxString() : allPreferred[0];
 }
 
 #endif
@@ -1702,8 +1718,15 @@ wxArrayString wxTranslations::GetAcceptableTranslations(const wxString& domain,
     GetPreferredUILanguage(available, allPreferred);
 
     // explicitly set language should always be preferred the most
-    if ( !m_lang.empty() )
+    if ( !m_lang.empty() && available.Index(m_lang) != wxNOT_FOUND )
+    {
+        // do not duplicate
+        const int pos = allPreferred.Index(m_lang);
+        if ( pos != wxNOT_FOUND )
+            allPreferred.RemoveAt(pos);
+
         allPreferred.insert(allPreferred.begin(), m_lang);
+    }
 
     return allPreferred;
 }
